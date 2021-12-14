@@ -1,0 +1,172 @@
+
+# 导入工具包
+import pandas as pd
+sms = pd.read_csv("C:/spam.csv", encoding='latin-1')
+sms.dropna(how="any", inplace=True, axis=1)
+sms.columns = ['label', 'message']
+sms.head()
+
+//利用groupby()方法来组合ham类和spam类的数据，然后通过describe()方法来查看基本//统计数据；可以看到ham类一共有4825条数据，非重复数据有4516条；spam类一共有//747条数据，非重复数据一共有653条
+
+sms.groupby('label').describe()
+
+
+sms['label_num'] = sms.label.map({'ham':0, 'spam':1})
+sms.head()
+
+sms['message_len'] = sms.message.apply(len)
+sms.head()
+
+# 导入matplotlib工具包
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12, 8))
+
+sms[sms.label=='ham'].message_len.plot(bins=35, kind='hist', color='blue', 
+                                       label='Ham messages', alpha=0.6)
+sms[sms.label=='spam'].message_len.plot(kind='hist', color='red', 
+                                       label='Spam messages', alpha=0.6)
+plt.legend()
+plt.xlabel("Message Length")
+
+//导入nltk
+import nltk
+
+from nltk.corpus import stopwords
+stopword = stopwords.words('english')
+print(len(stopword))
+
+import string
+from nltk.corpus import stopwords
+
+def text_process(mess):
+ Takes in a string of text, then performs the following:
+    1. Remove all punctuation
+    2. Remove all stopwords
+    3. Returns a list of the cleaned text
+    """
+    STOPWORDS = stopwords.words('english') + ['u', 'ü', 'ur', '4', '2', 'im', 'dont', 'doin', 'ure']
+    # 检查字符是否在里面
+    nopunc = [char for char in mess if char not in string.punctuation]
+
+    # 将所有的list中的数据集进行拼接.
+    nopunc = ''.join(nopunc)
+    
+    # 将文本中包含的停用词进行去除
+    return ' '.join([word for word in nopunc.split() if word.lower() not in STOPWORDS])
+
+
+//利用apply()方法将上面定义的函数应用到数据中message中，得到预处理后的数据//clean_msg。
+
+sms['clean_msg'] = sms.message.apply(text_process)
+sms.head()
+
+stopwords.words('english')[:20] #停用词中前20个词语  
+
+# split X and y into training and testing sets 
+from sklearn.model_selection import train_test_split
+X = sms.clean_msg
+y = sms.label_num
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
+print(X_train.shape)
+print(X_test.shape)
+print(y_train.shape)
+print(y_test.shape)
+
+from sklearn.feature_extraction.text import CountVectorizer
+
+# 实例化矢量化器
+vect = CountVectorizer()
+
+# 等效地：将拟合和变换合并为一个步骤
+X_train_dtm = vect.fit_transform(X_train)
+
+# 检查文档术语矩阵
+X_train_dtm
+
+
+# 将测试数据（使用适合的词汇表）转换为文档术语矩阵
+X_test_dtm = vect.transform(X_test)
+X_test_dtm
+
+
+from sklearn.feature_extraction.text import TfidfTransformer
+
+tfidf_transformer = TfidfTransformer()
+X_train_dtm = tfidf_transformer.fit_transform(X_train_dtm)
+X_test_dtm = tfidf_transformer.transform(X_test_dtm)
+X_test_dtm
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+
+logreg = LogisticRegression(solver='liblinear')
+svc = SVC(kernel='sigmoid', gamma=1.0)
+dtc = DecisionTreeClassifier(min_samples_split=7)
+rfc = RandomForestClassifier(n_estimators=31)
+
+# 使用LR模型训练
+%time logreg.fit(X_train_dtm, y_train)
+
+# 使用SVM模型训练
+%time svc.fit(X_train_dtm, y_train)
+
+# 使用决策树模型训练
+%time dtc.fit(X_train_dtm, y_train)
+
+# 使用随机森林模型训练
+%time rfc.fit(X_train_dtm, y_train)
+
+# 对X_test_dtm进行类预测
+y_pred_class = logreg.predict(X_test_dtm)
+
+y_pred_prob = logreg.predict_proba(X_test_dtm)
+# 输出前10条样本输出概率
+y_pred_prob[0:10]
+
+# 使用SVM模型预测
+svc_y_pred_class = svc.predict(X_test_dtm)
+# 使用决策树预测
+dtc_y_pred_class = dtc.predict(X_test_dtm)
+# 使用SVM模型预测
+rfc_y_pred_class = rfc.predict(X_test_dtm)
+
+from sklearn import metrics
+# 逻辑回归准确率
+logreg_acc = metrics.accuracy_score(y_test, y_pred_class)
+logreg_acc
+
+# SVM模型准确率
+svm_acc = metrics.roc_auc_score(y_test, svc_y_pred_class)
+svm_acc
+
+# 决策树模型准确率
+dtc_acc = metrics.roc_auc_score(y_test, dtc_y_pred_class)
+dtc_acc
+
+# 随机森林模型准确率
+rfc_acc = metrics.roc_auc_score(y_test, rfc_y_pred_class)
+rfc_acc
+
+import numpy as np
+# 将不同算法的结果准确率可视化
+pred_scores = [('LogisticRegression', [logreg_acc]), 
+               ('SVM', [svm_acc]), 
+               ('DecisionTree', [dtc_acc]), 
+               ('RandomFroest', [rfc_acc])]
+df = pd.DataFrame.from_dict(dict(pred_scores),orient='index', columns=['Score'])
+
+df.plot(kind='bar', ylim=(0.7,1.0), figsize=(8,6), align='center', colormap="Accent")
+plt.xticks(np.arange(4), df.index)
+plt.ylabel('Accuracy Score')
+plt.title('Distribution by Classifier')
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+
+test_case = X_test[40:50]
+X_test[40:50]
+
+case_test_dtm = tfidf_transformer.transform(vect.transform(test_case))
+# 使用逻辑回归模型进行预测
+y_pred_class = logreg.predict(case_test_dtm)
+y_pred_class
